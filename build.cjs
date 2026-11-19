@@ -1,0 +1,11 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const { createHash } = require('node:crypto');
+const root = __dirname;
+const load = name => fs.readFileSync(path.join(root,'src',name),'utf-8');
+const script = "const core = (() => {const module = {exports:{}};\n" + load('core.cjs') + "\nreturn module.exports;})();\n" + load('ui.js');
+if (/<\/script/i.test(script) || script.includes('\r')) throw Error('Unsafe script embedding');
+const hash = createHash('sha256').update(script).digest('base64');
+const output = load('template.html').replace('{{HASH}}',hash).replace('{{SCRIPT}}',() => script);
+fs.writeFileSync(path.join(root,'index.html'),output);
