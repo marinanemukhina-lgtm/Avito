@@ -8,6 +8,8 @@ const vm = require('node:vm');
 
 test('portable export has one integrity-bound script and no network/forms', () => {
   const html = fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+  assert.match(html, /Демо: консультант по продажам/);
+  assert.match(html, /id="demo-handoff"/);
   const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
   assert.equal(script.length,1);
   const hash = crypto.createHash('sha256').update(script[0][1]).digest('base64');
