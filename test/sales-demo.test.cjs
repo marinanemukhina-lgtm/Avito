@@ -116,3 +116,46 @@ test('negated quantity clears the old amount while preserving the unchallenged c
   assert.equal(confirmed.handoff.quantity,2);
   assert.equal(confirmed.handoff.city,'Москва');
 });
+
+test('approximate, bounded and ranged quantities cannot reuse or become an exact order amount', () => {
+  const session=sales.reply(start(tables),'Нужно 4 стола, доставка в Москву').session;
+  for (const phrase of [
+    'Теперь нужно примерно три стола',
+    'Нужно минимум пять столов',
+    'Нужно больше пяти столов',
+    'Нужно не менее 5 столов',
+    'Нужно около 3 столов',
+    'Нужно от трёх до пяти столов',
+    'В пределах 3–5 столов',
+    'Хотим 6 или 8 столов',
+    'Нужно не более пяти столов',
+    'Количество: около пяти',
+    '5 столов и больше',
+    'Нужно примерно 3, доставка в Москву',
+    'Не 4, а несколько; доставка около 2 часов'
+  ]) {
+    const outcome=sales.reply(session,phrase);
+    assert.equal(outcome.status,'needs-detail',phrase);
+    assert.equal(outcome.handoff,null,phrase);
+    assert.equal(outcome.session.quantity,null,phrase);
+    assert.equal(outcome.session.city,'Москва',phrase);
+    const corrected=sales.reply(outcome.session,'Нужно 3 стола');
+    assert.equal(corrected.handoff?.quantity,3,phrase);
+    assert.equal(corrected.handoff?.city,'Москва',phrase);
+  }
+});
+
+test('delivery timing and budget numbers do not invalidate or replace a known quantity', () => {
+  const session=sales.reply(start(tables),'Нужно 4 стола, доставка в Москву').session;
+  for (const phrase of ['Доставка около 3 часов','Доставка не ранее пяти часов','Нужно около 5000 ₽','Доставка через 3–5 дней','Не в 5 часов']) {
+    const outcome=sales.reply(session,phrase);
+    assert.equal(outcome.session.quantity,4,phrase);
+    assert.equal(outcome.session.city,'Москва',phrase);
+    assert.equal(outcome.handoff,null,phrase);
+  }
+  for (const phrase of ['Нужно 3 стола, доставка через 3–5 дней','Нужно 3 стола, доставка около 2 часов']) {
+    const outcome=sales.reply(session,phrase);
+    assert.equal(outcome.handoff?.quantity,3,phrase);
+    assert.equal(outcome.handoff?.city,'Москва',phrase);
+  }
+});

@@ -60,6 +60,15 @@ test('portable sales demo preserves product context and renders text-only handof
   get('demo-form').onsubmit({preventDefault(){}});
   assert.equal(get('demo-handoff').hidden,false);
   assert.match(get('demo-handoff-text').text,/2 ед\..*Казань/);
+  get('demo-message').value = 'Нужно не менее 5 столов';
+  get('demo-form').onsubmit({preventDefault(){}});
+  assert.equal(get('demo-handoff').hidden,true);
+  assert.equal(get('demo-handoff-text').text,'');
+  assert.match(get('demo-log').text,/Укажите точное количество/);
+  get('demo-message').value = 'Нужно 3 стола';
+  get('demo-form').onsubmit({preventDefault(){}});
+  assert.equal(get('demo-handoff').hidden,false);
+  assert.match(get('demo-handoff-text').text,/3 ед\..*Казань/);
   get('demo-listing').value = 'tables';
   get('demo-listing').onchange();
   assert.equal(get('demo-log').children.length,0);

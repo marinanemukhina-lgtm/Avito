@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-dUZ2qjt+8iQTX6wRfMKCfplj+grA4qY9pMMzGOw6i2I='; style-src 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-xyinuvUa514wy6YeYkZrCuJvShVSVzR0XNFnBAzjwJ4='; style-src 'unsafe-inline'; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'">
 <title>Кабинет продавца · Авито</title>
 <style>
 :root{color-scheme:dark;--bg:#181719;--panel:#242326;--field:#1c1b1d;--accent:#eadfbe;--text:#f6f3ee;--muted:#bdb8b2;--line:#4b484c}
@@ -158,18 +158,34 @@ const salesDemo = (() => {const module = {exports:{}};
   const numberPattern = '(?:[0-9]+|' + Object.keys(numberWords).join('|') + ')';
   const unitPattern = String.raw`(?:шт(?:\s*\.|ук(?:а|и|у)?)?|стул(?:а|ьев|ы)?|стол(?:а|ов|ы)?|стеллаж(?:а|ей|и)?|единиц(?:а|ы|у)?)`;
   const quantityUnits = new RegExp('(?<![\\p{L}\\d,.+-])(' + numberPattern + ')\\s*' + unitPattern + '(?![\\p{L}\\d])','gu');
-  const quantityLead = new RegExp('(?:нужно|нужны|бер[её]м|беру|возьму|закажу|количество|кол-во)\\s*[:=]?\\s*(' + numberPattern + ')(?![\\p{L}\\d,.+-])','u');
-  const ambiguousQuantity = new RegExp('(?:^|[^\\p{L}\\d])' + numberPattern + '(?:\\s*' + unitPattern + ')?\\s*(?:или|либо|от|до|[-/]|,)?\\s*(?:или|либо|до|[-/]|,)\\s*' + numberPattern + '(?![\\p{L}\\d])','u');
+  const quantityCue = String.raw`(?:нужно|нужны|берем|беру|возьму|закажу|хотим|количество|кол-во)\s*[:=]?\s*`;
+  const quantityLead = new RegExp(quantityCue + '(' + numberPattern + ')(?![\\p{L}\\d,.+-])','u');
+  const extendedNumber = '(?:[0-9]+(?:[.,][0-9]+)?|' + Object.keys(numberWords).join('|') +
+    '|одного|одной|двух|трех|четырех|пяти|шести|семи|восьми|девяти|десяти|двенадцати|пятнадцати|двадцати|тридцати|сорока|пятидесяти|ста)';
+  const startWord = String.raw`(?:^|[^\p{L}\d,.+-])`;
+  const endWord = String.raw`(?![\p{L}\d])`;
+  const bounds = String.raw`(?:(?:не\s+)?(?:больше|меньше|более|менее)|как\s+минимум|по\s+меньшей\s+мере|минимум|максимум|примерно|приблизительно|ориентировочно|около|порядка|плюс-минус|до|от)`;
+  const between = String.raw`(?:или|либо|до|[-/]|,)\s*`;
+  const uncertain = bounds + '\\s+' + extendedNumber + '|' + extendedNumber + '\\s*' + between + extendedNumber + '|' + extendedNumber + '\\s*\\+';
+  const boundWithUnits = new RegExp(startWord + '(?:' + uncertain + ')\\s*' + unitPattern + endWord,'u');
+  const rangeWithFirstUnit = new RegExp(startWord + extendedNumber + '\\s*' + unitPattern + endWord +
+    '\\s*(?:' + between + extendedNumber + '|(?:и|или)\\s+(?:больше|меньше|более|менее))' + endWord,'u');
+  const boundWithCue = new RegExp(startWord + quantityCue + '(?:' + uncertain +
+    ')(?=\\s*(?:[.!?]?\\s*$|[,;]\\s*(?:доставк|самовывоз|город|в\\s+)))','u');
+  const bareBound = new RegExp('^(?:' + uncertain + ')\\s*[.!?]?$','u');
+  const unrelatedUnits = String.raw`(?:₽|руб(?:ль|лей|ля|\.)?|тысяч(?:а|и)?|тыс\.?|коп(?:еек|\.)?|кг|метр(?:а|ов)?|час(?:а|ов)?|день|дня|дней|минут(?:а|ы)?|недел(?:я|и|ь)|месяц(?:а|ев)?)`;
+  const numericOther = new RegExp(startWord + extendedNumber + '(?:\\s*' + between + extendedNumber + ')?\\s*' + unrelatedUnits + endWord,'u');
+  const startsWithOtherUnit = new RegExp('^\\s*' + unrelatedUnits + endWord,'u');
   const quantityAsNumber = value => {
     const result = /^[0-9]+$/.test(value) ? Number(value) : numberWords[value];
     return Number.isSafeInteger(result) && result >= 1 && result <= 100000 ? result : null;
   };
   function parseQuantity(s, pending) {
-    if (ambiguousQuantity.test(s) || /(?:примерно|около|минимум|максимум|больше|меньше|плюс-минус)\s+[0-9]/u.test(s) ||
+    if (boundWithUnits.test(s) || rangeWithFirstUnit.test(s) || boundWithCue.test(s) || (pending && bareBound.test(s)) ||
         /[0-9]+[.,][0-9]+\s*шт/u.test(s)) return {value:null,ambiguous:true};
     const found = [...s.matchAll(quantityUnits)].map(match => match[1]);
-    const lead = s.match(quantityLead)?.[1];
-    if (!found.length && lead && !/(?:₽|руб|тысяч|тыс\.?|кг|метр)/u.test(s.slice(s.indexOf(lead) + lead.length, s.indexOf(lead) + lead.length + 12))) found.push(lead);
+    const lead = s.match(quantityLead);
+    if (!found.length && lead && !startsWithOtherUnit.test(s.slice(lead.index + lead[0].length))) found.push(lead[1]);
     if (!found.length && pending && new RegExp('^' + numberPattern + '[.!?]?$', 'u').test(s)) found.push(s.replace(/[.!?]$/, ''));
     if (found.length === 0) return {value:null,ambiguous:false};
     const values = [...new Set(found.map(quantityAsNumber))];
@@ -188,9 +204,11 @@ const salesDemo = (() => {const module = {exports:{}};
   const mutationRequest = /перекинь|оплат[аиу]|оплатить|скидк|рассроч|гарант|сертификат|артикул|размер|материал|возврат|банков/u;
   const cancelIntent = /(?:^|[^\p{L}])(?:отмен(?:а|ите|и|яем|яю)|передумал(?:а|и)?|не (?:нужн[аоы]|беру|берем|покупаю))(?!\p{L})/u;
   const deliveryQuote = /сколько (?:стоит|будет стоить|обойдется) доставк|(?:цен[аыу]|стоимост[ьи]|срок[аи]?) (?:на )?(?:за )?доставк|(?:приблизительные )?срок[аи] (?:и стоимость )?доставк|когда (?:сможете )?достав/u;
-  const clearsQuantity = new RegExp('(?:^|[^\\p{L}])не\\s+' + numberPattern + '(?![\\p{L}\\d])(?:\\s*' + unitPattern + ')?(?=\\s|[,.!?]|$)', 'u');
-  const clearsCity = new RegExp('(?:^|[^\\p{L}])не\\s+(?:(?:в|из|до)\\s+(?!' +
-    '(?:наличии|комплекте)(?!\\p{L}))|(?:' + cities.map(([,pattern])=>pattern.source).join('|') + ')(?!\\p{L}))', 'u');
+  const clearsQuantity = new RegExp(startWord + 'не\\s+' + numberPattern + endWord +
+    '(?!\\s*' + unrelatedUnits + endWord + ')(?:\\s*' + unitPattern + ')?(?=\\s|[,.!?]|$)', 'u');
+  const nonCityPrefix = extendedNumber + endWord + '|(?:наличии|комплекте|понедельник|вторник|среду|четверг|пятницу|субботу|воскресенье)' + endWord;
+  const clearsCity = new RegExp(startWord + 'не\\s+(?:(?:в|из)\\s+(?!(?:' + nonCityPrefix + '))|(?:' +
+    cities.map(([,pattern])=>pattern.source).join('|') + ')' + endWord + ')', 'u');
 
   function reply(session,text) {
     if (!session || session[sessionToken] !== true) throw Error('Начни новый учебный диалог.');
@@ -218,6 +236,9 @@ const salesDemo = (() => {const module = {exports:{}};
     const request = purchaseIntent.test(s);
     const qty = parseQuantity(s,session.pending);
     const namedCities = parseCities(s);
+    if (numericOther.test(s) && !qty.ambiguous && qty.value===null && namedCities.length===0 && !askingPrice && !askingStock) {
+      return wrap(session,'Сроки и дополнительные условия в учебном каталоге не подтверждены. Количество не изменено.', 'needs-detail');
+    }
     const salesIntent = request || qty.value !== null || qty.ambiguous || (!askingPrice && !askingStock && namedCities.length > 0);
     const evidence = [], lines = [];
     if (askingPrice && item.price !== null) {
