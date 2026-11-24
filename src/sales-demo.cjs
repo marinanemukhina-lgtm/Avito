@@ -70,6 +70,9 @@
   const mutationRequest = /перекинь|оплат[аиу]|оплатить|скидк|рассроч|гарант|сертификат|артикул|размер|материал|возврат|банков/u;
   const cancelIntent = /(?:^|[^\p{L}])(?:отмен(?:а|ите|и|яем|яю)|передумал(?:а|и)?|не (?:нужн[аоы]|беру|берем|покупаю))(?!\p{L})/u;
   const deliveryQuote = /сколько (?:стоит|будет стоить|обойдется) доставк|(?:цен[аыу]|стоимост[ьи]|срок[аи]?) (?:на )?(?:за )?доставк|(?:приблизительные )?срок[аи] (?:и стоимость )?доставк|когда (?:сможете )?достав/u;
+  const clearsQuantity = new RegExp('(?:^|[^\\p{L}])не\\s+' + numberPattern + '(?![\\p{L}\\d])(?:\\s*' + unitPattern + ')?(?=\\s|[,.!?]|$)', 'u');
+  const clearsCity = new RegExp('(?:^|[^\\p{L}])не\\s+(?:(?:в|из|до)\\s+(?!' +
+    '(?:наличии|комплекте)(?!\\p{L}))|(?:' + cities.map(([,pattern])=>pattern.source).join('|') + ')(?!\\p{L}))', 'u');
 
   function reply(session,text) {
     if (!session || session[sessionToken] !== true) throw Error('Начни новый учебный диалог.');
@@ -81,6 +84,15 @@
       'Этот запрос находится за рамками демо. Работаю только с карточкой товара и данными для черновика заявки.', 'out-of-scope');
     if (cancelIntent.test(s)) return wrap(createSession(item.id),
       'Данные черновика сброшены. Заявка не отправлялась.', 'needs-detail');
+    const cityCorrection=clearsCity.test(s), quantityCorrection=clearsQuantity.test(s);
+    if (cityCorrection || quantityCorrection) {
+      const cityChoices=parseCities(s), parsed=parseQuantity(s,session.pending);
+      const city=cityCorrection?null:(cityChoices.length===1?cityChoices[0]:cityChoices.length>1?null:session.city);
+      const quantity=quantityCorrection||parsed.ambiguous?null:parsed.value??session.quantity;
+      const missing=[quantity===null?'точное количество':'',city===null?'один город':''].filter(Boolean).join(' и ');
+      return wrap(makeSession(item.id,quantity,city,true),
+        'Уточните '+missing+' отдельным сообщением. Прежнее значение для исправленного поля сброшено.', 'needs-detail');
+    }
     if (deliveryQuote.test(s)) return wrap(session,
       'Цена и сроки доставки в учебном каталоге не указаны. Их нужно уточнить у менеджера.', 'needs-detail');
     const askingPrice = priceIntent.test(s);

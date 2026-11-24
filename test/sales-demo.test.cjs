@@ -91,3 +91,28 @@ test('initializes documented browser global without CommonJS or network globals'
   const api=sandbox.AvitoSalesDemo, session=api.createSession(api.listings[0].id);
   assert.equal(api.reply(session,'Нужно 2 штуки, доставка в Ростов-на-Дону').handoff.quantity,2);
 });
+
+test('negated destination clears the old city instead of generating a stale manager draft', () => {
+  let session = start(tables);
+  session = sales.reply(session,'Нужно 4 стола, доставка в Москву').session;
+  for (const correction of ['Не в Москву, а в Сочи', 'В Сочи, не в Москву', 'Нужно 4 стола не в Москву']) {
+    const corrected = sales.reply(session,correction);
+    assert.equal(corrected.status,'needs-detail',correction);
+    assert.equal(corrected.handoff,null,correction);
+    assert.equal(corrected.session.city,null,correction);
+    assert.equal(corrected.session.quantity,4,correction);
+    assert.equal(sales.reply(corrected.session,'Казань').handoff.city,'Казань');
+  }
+});
+
+test('negated quantity clears the old amount while preserving the unchallenged city', () => {
+  const session = sales.reply(start(tables),'Нужно 4 стола, доставка в Москву').session;
+  const corrected = sales.reply(session,'Не 4 стола, а несколько, Москва');
+  assert.equal(corrected.status,'needs-detail');
+  assert.equal(corrected.handoff,null);
+  assert.equal(corrected.session.quantity,null);
+  assert.equal(corrected.session.city,'Москва');
+  const confirmed = sales.reply(corrected.session,'2 стола');
+  assert.equal(confirmed.handoff.quantity,2);
+  assert.equal(confirmed.handoff.city,'Москва');
+});

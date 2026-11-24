@@ -51,6 +51,15 @@ test('portable sales demo preserves product context and renders text-only handof
   assert.equal(get('demo-handoff').hidden,false);
   assert.match(get('demo-handoff-text').text,/2 ед\..*Ростов-на-Дону/);
   assert.equal(get('demo-log').children.length,6);
+  get('demo-message').value = 'Не в Ростов, а в Сочи';
+  get('demo-form').onsubmit({preventDefault(){}});
+  assert.equal(get('demo-handoff').hidden,true);
+  assert.equal(get('demo-handoff-text').text,'');
+  assert.match(get('demo-log').text,/Уточните один город/);
+  get('demo-message').value = 'Казань';
+  get('demo-form').onsubmit({preventDefault(){}});
+  assert.equal(get('demo-handoff').hidden,false);
+  assert.match(get('demo-handoff-text').text,/2 ед\..*Казань/);
   get('demo-listing').value = 'tables';
   get('demo-listing').onchange();
   assert.equal(get('demo-log').children.length,0);
